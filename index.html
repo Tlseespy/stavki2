@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Пенальти · мартингейл ×2</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:system-ui,sans-serif;background:#0f1115;color:#e8edf5;
+margin:0 auto;padding:16px;max-width:640px;line-height:1.45}
+h1{font-size:21px;margin:6px 0 4px}
+h2{font-size:13px;margin:20px 0 8px;color:#8b95a7;text-transform:uppercase;font-weight:600}
+.lead{color:#8b95a7;font-size:14px;margin:0 0 16px}
+.card{background:#171a21;border:1px solid #252a34;border-radius:14px;padding:16px;margin-bottom:10px}
+label{display:block;font-size:13px;color:#8b95a7;margin-bottom:4px;margin-top:10px}
+label:first-child{margin-top:0}
+input,select{width:100%;padding:11px 12px;font-size:16px;background:#0d1017;
+color:#e8edf5;border:1px solid #252a34;border-radius:10px}
+input:focus,select:focus{outline:none;border-color:#4f8cff}
+button.go{width:100%;padding:14px;font-size:16px;font-weight:600;background:#4f8cff;
+color:#fff;border:none;border-radius:12px;margin-top:14px;cursor:pointer}
+button.sec{background:transparent;border:1px dashed #252a34;color:#e8edf5;
+padding:11px;border-radius:12px;font-size:14px;width:100%;margin-top:8px;cursor:pointer}
+.verdict{padding:14px;border-radius:12px;font-size:15px;font-weight:600;text-align:center;margin:14px 0}
+.yes{background:#12261a;border:1px solid #1f4a2e;color:#b8f0c8}
+.no{background:#2a1a1a;border:1px solid #4a2a2a;color:#ffb4b4}
+.info{background:#0f2030;border:1px solid #1c3a52;color:#bfdcff}
+.line{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #252a34;font-size:14px}
+.line:last-child{border:none}
+.line b{color:#fff}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+th,td{padding:6px 5px;border-bottom:1px solid #252a34;text-align:right}
+th:first-child,td:first-child{text-align:left;color:#8b95a7}
+th{color:#8b95a7;font-weight:500;font-size:12px}
+.pos{color:#2ecc71}.neg{color:#ff5c5c}.dim{opacity:.4}
+.w{background:#12261a}.l{background:#2a1a1a}
+.hint{font-size:12.5px;color:#8b95a7;margin-top:10px}
+.warn{background:#2a1a1a;border:1px solid #4a2a2a;color:#ffb4b4;
+padding:11px;border-radius:10px;font-size:13px;margin-top:12px}
+.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px}
+.kpi{background:#0d1017;border:1px solid #252a34;border-radius:10px;padding:10px}
+.kpi .l{font-size:11px;color:#8b95a7;text-transform:uppercase}
+.kpi .v{font-size:17px;font-weight:700;margin-top:2px}
+</style>
+</head>
+<body>
+<h1>Пенальти · мартингейл ×2</h1>
+<p class="lead">Одна контора. Ставим всегда на одну сторону. Проиграли — ×2. Выиграли — сброс на минимум.</p>
+<div class="card">
+<label>Сторона ставки</label>
+<select id="side">
+<option value="yes">ДА · пенальти будет</option>
+<option value="no">НЕТ · пенальти не будет</option>
+</select>
+<label>Кэф ДА</label>
+<input id="kYes" type="number" step="0.01" value="3.80">
+<label>Кэф НЕТ</label>
+<input id="kNo" type="number" step="0.01" value="1.27">
+<label>Банк, ₽</label>
+<input id="bank" type="number" step="100" value="10000">
+<label>Минимальная ставка, ₽</label>
+<input id="minBet" type="number" step="50" value="100">
+<label>Ставок в сессии</label>
+<input id="rounds" type="number" step="1" value="100">
+<button class="go" onclick="run(1)">Одна сессия</button>
+<button class="sec" onclick="run(2000)">Монте-Карло (2000 сессий)</button>
+</div>
+<div id="out"></div>
+<div class="warn">Проиграли → ×2. Выиграли → сброс. Схема даёт частые мелкие плюсы и редкий крупный минус.</div>
+<script>
+const R=x=>Number.isFinite(x)?Math.round(x).toLocaleString('ru-RU')+' ₽':'—';
+const F=(x,d=2)=>Number.isFinite(x)?x.toFixed(d):'—';
+function simulate({bank,minBet,k,pWin,rounds}){
+let b=bank,bet=minBet,maxBet=minBet,peak=bank,maxDD=0;
+let busted=false,bustedAt=null,wins=0,losses=0;
+const log=[{i:0,bet:0,win:null,bank:b,profit:0}];
+for(let i=1;i<=rounds;i++){
+if(b<bet-1e-9){busted=true;bustedAt=i;break}
+b-=bet;
+const win=Math.random()<pWin;
+if(win){b+=bet*k;wins++;log.push({i,bet,win:true,bank:b});
+bet=minBet}else{losses++;log.push({i,bet,win:false,bank:b});bet*=2}
+if(bet>maxBet)maxBet=bet;
+if(b>peak)peak=b;
+const dd=peak-b;if(dd>maxDD)maxDD=dd;
+}
+return{finalBank:b,maxBet,maxDD,busted,bustedAt,log,wins,losses};
+}
+function run(S){
+const side=document.getElementById('side').value;
+const kY=+document.getElementById('kYes').value;
+const kN=+document.getElementById('kNo').value;
+const bank=+document.getElementById('bank').value;
+const minBet=+document.getElementById('minBet').value;
+const rounds=+document.getElementById('rounds').value||100;
+const out=document.getElementById('out');
+const k=side==='yes'?kY:kN;
+const label=side==='yes'?'ДА':'НЕТ';
+if(!(kY>1)||!(kN>1)||!(bank>0)||!(minBet>0)||rounds<=0){
+out.innerHTML='<div class="verdict no">Проверь параметры.</div>';return;
+}
+const pWin=1/k;
+let steps=0,cum=0,st=minBet;
+while(cum+st<=bank+1e-9&&steps<60){cum+=st;steps++;st*=2}
+let html='';
+html+='<h2>1. Параметры</h2><div class="card">';
+html+='<div class="line"><span>Ставим на</span><b>'+label+'</b></div>';
+html+='<div class="line"><span>Кэф</span><b>'+F(k)+'</b></div>';
+html+='<div class="line"><span>Implied P</span><b>'+F(pWin*100)+'%</b></div>';
+html+='<div class="line"><span>EV с 1 ₽</span><b class="neg">'+F(pWin*(k-1)-(1-pWin),4)+'</b></div>';
+html+='<div class="line"><span>Мин. ставка</span><b>'+R(minBet)+'</b></div>';
+html+='<div class="line"><span>Банк</span><b>'+R(bank)+'</b></div>';
+html+='</div>';
+html+='<div class="verdict '+(steps>=8?'yes':(steps>=5?'info':'no'))+'">Банк выдержит <b>'+steps+'</b> проигрышей подряд</div>';
+html+='<h2>2. Цепочка ×2</h2><div class="card">';
+html+='<table><thead><tr><th>#</th><th>Ставка</th><th>Потрачено</th><th>Возврат</th><th>Профит</th></tr></thead><tbody>';
+let stake=minBet,total=0,bust=0;
+for(let i=1;i<=12;i++){
+total+=stake;
+const ret=stake*k;
+const profit=ret-total;
+const bad=total>bank;
+if(bad&&!bust)bust=i;
+html+='<tr class="'+(bad?'dim':'')+'"><td>'+i+'</td><td>'+R(stake)+'</td><td>'+R(total)+'</td><td>'+R(ret)+'</td><td class="'+(profit>=0?'pos':'neg')+'">'+(profit>=0?'+':'')+R(profit)+'</td></tr>';
+stake*=2;
+}
+html+='</tbody></table>';
+if(bust)html+='<div class="warn">На шаге '+bust+' банка не хватает — точка слива.</div>';
+html+='</div>';
+if(S===1){
+const r=simulate({bank,minBet,k,pWin,rounds});
+const profit=r.finalBank-bank;
+html+='<h2>3. Одна сессия · '+(r.log.length-1)+' ставок</h2><div class="card">';
+html+='<div class="kpis">';
+html+='<div class="kpi"><div class="l">Итог</div><div class="v">'+R(r.finalBank)+'</div></div>';
+html+='<div class="kpi"><div class="l">P&L</div><div class="v '+(profit<0?'neg':'pos')+'">'+(profit>=0?'+':'')+R(profit)+'</div></div>';
+html+='<div class="kpi"><div class="l">W / L</div><div class="v">'+r.wins+' / '+r.losses+'</div></div>';
+html+='<div class="kpi"><div class="l">Слился?</div><div class="v '+(r.busted?'neg':'pos')+'">'+(r.busted?'Да, шаг '+r.bustedAt:'Нет')+'</div></div>';
+html+='</div>';
+html+='<h3 style="font-size:13px;color:#8b95a7;margin:16px 0 6px">Журнал (первые 30)</h3>';
+html+='<div style="max-height:280px;overflow:auto;border:1px solid #252a34;border-radius:10px">';
+html+='<table><thead><tr><th>#</th><th>Ставка</th><th>Результат</th><th>Банк</th></tr></thead><tbody>';
+r.log.slice(1,31).forEach(l=>{
+html+='<tr class="'+(l.win?'w':'l')+'"><td>'+l.i+'</td><td>'+R(l.bet)+'</td><td class="'+(l.win?'pos':'neg')+'">'+(l.win?'ВЫИГРЫШ':'проигрыш')+'</td><td>'+R(l.bank)+'</td></tr>';
+});
+html+='</tbody></table></div></div>';
+}else{
+const finals=[];let busts=0,mbSum=0,ddSum=0;
+for(let i=0;i<S;i++){
+const r=simulate({bank,minBet,k,pWin,rounds});
+finals.push(r.finalBank);
+if(r.busted)busts++;
+mbSum+=r.maxBet;ddSum+=r.maxDD;
+}
+const sorted=[...finals].sort((a,b)=>a-b);
+const avg=finals.reduce((s,x)=>s+x,0)/S;
+const median=sorted[Math.floor(S/2)];
+const p5=sorted[Math.floor(S*0.05)];
+const p95=sorted[Math.floor(S*0.95)];
+const prof=finals.filter(x=>x>bank).length;
+html+='<h2>3. Монте-Карло · '+S+'</h2><div class="card">';
+html+='<div class="kpis">';
+html+='<div class="kpi"><div class="l">Средний итог</div><div class="v '+(avg<bank?'neg':'pos')+'">'+R(avg)+'</div></div>';
+html+='<div class="kpi"><div class="l">Медиана</div><div class="v '+(median<bank?'neg':'pos')+'">'+R(median)+'</div></div>';
+html+='<div class="kpi"><div class="l">5-й перц.</div><div class="v">'+R(p5)+'</div></div>';
+html+='<div class="kpi"><div class="l">95-й перц.</div><div class="v">'+R(p95)+'</div></div>';
+html+='<div class="kpi"><div class="l">Слился</div><div class="v '+(busts/S>0.3?'neg':'')+'">'+F(busts/S*100,1)+'%</div></div>';
+html+='<div class="kpi"><div class="l">В плюсе</div><div class="v '+(prof/S>0.5?'pos':'neg')+'">'+F(prof/S*100,1)+'%</div></div>';
+html+='<div class="kpi"><div class="l">Ср. макс. ставка</div><div class="v">'+R(mbSum/S)+'</div></div>';
+html+='<div class="kpi"><div class="l">Ср. просадка</div><div class="v">'+R(ddSum/S)+'</div></div>';
+html+='</div></div>';
+}
+out.innerHTML=html;
+}
+</script>
+</body>
+</html>
